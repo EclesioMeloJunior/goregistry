@@ -1,30 +1,47 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 )
 
-type Serv03 struct{}
+func NewServiceC(serviceA ServiceAsync) *ServiceC {
+	fmt.Println("Wait for service A ...")
+	serviceA.Wait()
+	fmt.Println("Service C can start now")
+	return &ServiceC{}
+}
 
-func (s *Serv03) Start(ctx context.Context) (errsCh chan error) {
-	errsCh = make(chan error)
+type ServiceC struct {
+	errsCh chan error
+	stopCh chan struct{}
+}
+
+func (s *ServiceC) Start() (errsCh chan error, err error) {
+	s.errsCh = make(chan error)
+	s.stopCh = make(chan struct{})
+
 	timer := time.NewTicker(time.Second * 3)
 
 	go func() {
 		for {
 			select {
 			case <-timer.C:
-				fmt.Println("Service 03 running...")
-			case <-ctx.Done():
-				close(errsCh)
+				fmt.Println("Service C running...")
+			case <-s.stopCh:
 				return
 			}
 		}
 	}()
 
-	return errsCh
+	return s.errsCh, nil
 }
 
-func (s *Serv03) Stop() error { return nil }
+func (s *ServiceC) Stop() error {
+	close(s.stopCh)
+	close(s.errsCh)
+
+	fmt.Println("Stopping service C")
+	time.Sleep(time.Second * 5)
+	return nil
+}
