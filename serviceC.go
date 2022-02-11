@@ -5,43 +5,35 @@ import (
 	"time"
 )
 
-func NewServiceC(serviceA ServiceAsync) *ServiceC {
-	fmt.Println("Wait for service A ...")
-	serviceA.Wait()
-	fmt.Println("Service C can start now")
-	return &ServiceC{}
+func NewServiceC(svcA ServiceWithWait) *ServiceC {
+	return &ServiceC{
+		A: svcA,
+	}
 }
 
 type ServiceC struct {
-	errsCh chan error
-	stopCh chan struct{}
+	A ServiceWithWait
 }
 
-func (s *ServiceC) Start() (errsCh chan error, err error) {
-	s.errsCh = make(chan error)
-	s.stopCh = make(chan struct{})
+func (s *ServiceC) Run(stop chan struct{}, errs chan error) {
+	fmt.Println("Wait for service A ...")
+	s.A.Wait()
+	fmt.Println("Service C can start now")
 
 	timer := time.NewTicker(time.Second * 3)
 
 	go func() {
+		defer close(errs)
 		for {
 			select {
 			case <-timer.C:
 				fmt.Println("Service C running...")
-			case <-s.stopCh:
+			case <-stop:
 				return
 			}
 		}
 	}()
 
-	return s.errsCh, nil
-}
-
-func (s *ServiceC) Stop() error {
-	close(s.stopCh)
-	close(s.errsCh)
-
-	fmt.Println("Stopping service C")
-	time.Sleep(time.Second * 5)
-	return nil
+	<-stop
+	fmt.Println("Stopping service C...")
 }

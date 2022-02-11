@@ -9,58 +9,42 @@ import (
 var ErrRestartServiceA = errors.New("please, restart the service")
 
 type ServiceA struct {
-	ready  chan struct{}
-	errsCh chan error
-	stopCh chan struct{}
+	ready chan struct{}
 }
 
 func NewServiceA() *ServiceA {
 	return &ServiceA{
-		ready:  make(chan struct{}),
-		errsCh: make(chan error),
-		stopCh: make(chan struct{}),
+		ready: make(chan struct{}),
 	}
 }
 
-func (s *ServiceA) Start() (errs chan error, err error) {
-	beforeReady := func() {
-		time.Sleep(time.Second * 6)
-		close(s.ready)
-	}
+func (s *ServiceA) Run(stop chan struct{}, errs chan error) {
+	go s.restartOnError(stop, errs)
 
-	go s.restartOnError(s.errsCh, s.stopCh)
-	go beforeReady()
-
-	return s.errsCh, nil
-}
-
-func (s *ServiceA) Stop() error {
-	close(s.stopCh)
+	time.Sleep(time.Second * 6)
 	close(s.ready)
 
-	fmt.Println("Stopping service A")
-	time.Sleep(time.Second * 3)
-	return nil
+	<-stop
+	fmt.Println("Stopping service A ...")
 }
 
 func (s *ServiceA) Wait() {
 	<-s.ready
 }
 
-func (s *ServiceA) restartOnError(errsCh chan error, stopCh chan struct{}) {
-	defer close(errsCh)
-
+func (s *ServiceA) restartOnError(stop chan struct{}, errs chan error) {
+	defer close(errs)
 	timer := time.NewTicker(time.Second * 3)
-	restartTimer := time.NewTimer(time.Second * 7)
+	restartTimer := time.NewTimer(time.Second * 11)
 
 	for {
 		select {
 		case <-timer.C:
 			fmt.Println("Service A running...")
-		case <-restartTimer.C:
-			errsCh <- ErrRestartServiceA
+		case <-stop:
 			return
-		case <-stopCh:
+		case <-restartTimer.C:
+			errs <- ErrRestartServiceA
 			return
 		}
 	}
